@@ -3,16 +3,19 @@
 
 class Devcli < Formula
   desc "Linux-style developer terminal theme for macOS Terminal.app"
-  homepage "https://github.com/YOUR_USERNAME/devcli"
-  url "https://github.com/YOUR_USERNAME/devcli/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "REPLACE_WITH_SHA256_OF_YOUR_TARBALL"
+  homepage "https://github.com/Ruhanpaco/DevCLI"
+  url "https://github.com/Ruhanpaco/DevCLI/archive/refs/tags/v1.0.0.tar.gz"
+  sha256 "777dd974e3d36fad00568e4b235b66eff50082b9924355ab7243f0b8cd54c599"
   license "MIT"
   version "1.0.0"
 
   depends_on "fastfetch"
 
   def install
-    libexec.install "src", "install.sh"
+    # Ship all source files and the installer into the brew prefix
+    libexec.install "src", "install.sh", "patch_zshrc.zsh", "generate_terminal_profile.py"
+
+    # Thin wrapper so `devcli install` works from PATH
     (bin/"devcli").write <<~SH
       #!/usr/bin/env zsh
       exec "#{libexec}/install.sh" "$@"
@@ -24,22 +27,28 @@ class Devcli < Formula
     <<~EOS
       DevCLI has been installed!
 
-      To apply the theme, run:
+      Apply the theme by running:
         devcli install
 
-      This will:
-        • Install 4 colour profiles to Terminal.app (Dark, Glass, Abyss, Ghost)
-        • Configure your Zsh prompt (two-line Linux-style)
-        • Set up fastfetch for system info on launch
-        • Add custom commands: sysinfo, battinfo, netinfo, diskinfo, procinfo...
+      What the installer does:
+        • Imports 4 colour profiles into Terminal.app (Dark, Glass, Abyss, Ghost)
+        • Sets up your Zsh prompt (Linux two-line style)
+        • Configures fastfetch with Apple logo on session start
+        • Adds custom commands: sysinfo, syswatch, battinfo, netinfo,
+          speedtest, diskinfo, procinfo, portscan, tempinfo
 
-      Open a new Terminal window after running the installer.
-      Switch themes: Terminal → Settings → Profiles → pick a DevCLI theme → Default
+      Switch themes:
+        Terminal → Settings → Profiles → pick a DevCLI theme → Default
+
+      Show all commands:
+        devcli
+
     EOS
   end
 
   test do
     assert_predicate bin/"devcli", :exist?
     assert_predicate bin/"devcli", :executable?
+    assert_match "install.sh", shell_output("ls #{libexec}")
   end
 end
