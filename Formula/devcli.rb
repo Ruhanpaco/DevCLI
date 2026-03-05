@@ -4,10 +4,10 @@
 class Devcli < Formula
   desc "Linux-style developer terminal theme for macOS Terminal.app"
   homepage "https://github.com/Ruhanpaco/DevCLI"
-  url "https://github.com/Ruhanpaco/DevCLI/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "777dd974e3d36fad00568e4b235b66eff50082b9924355ab7243f0b8cd54c599"
+  url "https://github.com/Ruhanpaco/DevCLI/archive/refs/tags/v1.0.1.tar.gz"
+  sha256 "92d138a15310e0f806931ad48533d11d029ffe32ee94d8606f80554eab2004ef"
   license "MIT"
-  version "1.0.0"
+  version "1.0.1"
 
   depends_on "fastfetch"
 
