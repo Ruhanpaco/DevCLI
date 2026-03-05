@@ -32,48 +32,29 @@ cat <<'EOF'
 EOF
 }
 
-# ── 1. Install Terminal.app profiles ────────────────────────
+# ── 1. Install Terminal.app profiles (silent — no new windows) ─
 install_terminal_profile() {
-  info "Installing DevCLI profiles to Terminal.app…"
+  info "Importing DevCLI profiles into Terminal.app…"
 
-  local -a profiles=(
-    "DevCLI-Dark"
-    "DevCLI-Glass"
-    "DevCLI-Abyss"
-    "DevCLI-Ghost"
-  )
+  local importer="$SCRIPT_DIR/import_profiles.py"
 
-  for name in "${profiles[@]}"; do
-    local plist="$SRC_DIR/$name.terminal"
-    if [[ ! -f "$plist" ]]; then
-      warn "Profile not found, skipping: $name"
-      continue
-    fi
-    plutil -lint "$plist" &>/dev/null || { warn "Invalid plist: $name — skipping"; continue; }
-    open "$plist"
-    sleep 1
-    success "Imported $name"
-  done
-
-  info "Waiting for Terminal.app to register all profiles…"
-  sleep 2
-
-  if /usr/bin/osascript 2>/dev/null <<'APPLESCRIPT'
-    tell application "Terminal"
-      set default settings to settings set "DevCLI Dark"
-      set startup settings to settings set "DevCLI Dark"
-    end tell
-APPLESCRIPT
-  then
-    success "DevCLI Dark set as default profile."
-  else
-    warn "Could not auto-set default. Go to:"
-    warn "  Terminal → Settings → Profiles → choose a DevCLI profile → 'Default'"
+  if [[ ! -f "$importer" ]]; then
+    warn "import_profiles.py not found — skipping profile install."
+    warn "Run: python3 $SCRIPT_DIR/import_profiles.py"
+    return 0
   fi
 
-  info "Opening a new Terminal window to preview…"
-  /usr/bin/osascript -e 'tell application "Terminal" to do script ""' 2>/dev/null || true
+  if ! python3 "$importer"; then
+    warn "Profile import had issues. Run manually:"
+    warn "  python3 $importer"
+    return 0
+  fi
+
+  success "All DevCLI profiles imported (no new windows opened)"
+  info "To switch theme on the CURRENT window:"
+  info "  Shell menu → Use Profile → pick a DevCLI theme"
 }
+
 
 # ── 2. Install Zsh Theme ────────────────────────────────────
 install_zsh_theme() {
