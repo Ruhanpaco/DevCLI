@@ -102,6 +102,7 @@ sysinfo() {
   _ns_row "OS"       "$os"
   _ns_row "Kernel"   "$kernel"
   _ns_row "Uptime"   "$uptime"
+  echo ""
   _ns_row "CPU"      "$cpu"
   _ns_row "GPU"      "${gpu:-Integrated}"
   printf  "  ${_NS_C}%-18s${_NS_X} " "CPU Usage"
@@ -110,6 +111,7 @@ sysinfo() {
   printf  "  ${_NS_C}%-18s${_NS_X} " "RAM Usage"
   _ns_bar "${ram_pct:-0}"
   printf  "  ${_NS_W}(${ram_used}/${ram_total} GiB)${_NS_X}\n"
+  echo ""
   _ns_row "Shell"    "$SHELL ($ZSH_VERSION)"
   _ns_row "Hostname" "$(hostname)"
   echo ""
@@ -136,11 +138,13 @@ battinfo() {
   else
     printf "${_NS_W}AC Power (no battery)${_NS_X}\n"
   fi
+  echo ""
   _ns_row "Status"   "${charging:-Unknown}"
   _ns_row "Health"   "${health:-Unknown}"
+  _ns_row "Cycles"   "${cycles:-Unknown}"
+  echo ""
   _ns_row "Max Cap"  "${max_cap:-Unknown}"
   _ns_row "Cur Cap"  "${current_cap:-Unknown}"
-  _ns_row "Cycles"   "${cycles:-Unknown}"
   echo ""
 }
 
@@ -153,23 +157,21 @@ netinfo() {
   local pub_ip
   pub_ip=$(curl -s --max-time 4 https://api.ipify.org 2>/dev/null || echo "Offline")
   _ns_row "Public IP"  "$pub_ip"
-
+  echo ""
   local iface local_ip
   for iface in $(networksetup -listallhardwareports 2>/dev/null | awk '/Device:/{print $2}'); do
     local_ip=$(ipconfig getifaddr "$iface" 2>/dev/null)
     [[ -n "$local_ip" ]] && _ns_row "[$iface]" "$local_ip"
   done
-
+  echo ""
   _ns_row "WiFi SSID"  "$(_wifi_ssid)"
-
+  echo ""
   local dns
   dns=$(scutil --dns 2>/dev/null | awk '/nameserver/{print $3}' | sort -u | tr '\n' '  ')
   _ns_row "DNS"        "${dns:-N/A}"
-
   local gw
   gw=$(netstat -rn 2>/dev/null | awk '/^default/{print $2; exit}')
   _ns_row "Gateway"    "${gw:-N/A}"
-
   echo ""
 }
 
@@ -181,12 +183,13 @@ speedtest() {
   echo "  ${_NS_D}Using Cloudflare speed endpoints…${_NS_X}"
   echo ""
 
-  # ── Latency (ping to 1.1.1.1) ──────────────────────────
+  # ── Latency (ping to 1.1.1.1) ────────────────────────────
   printf "  ${_NS_C}%-18s${_NS_X} " "Ping (1.1.1.1)"
   local latency
   latency=$(ping -c 4 -q 1.1.1.1 2>/dev/null | \
     awk -F'/' '/^round-trip/{printf "%.1f ms", $5}')
   printf "${_NS_W}%s${_NS_X}\n" "${latency:-N/A}"
+  echo ""
 
   # ── Download ────────────────────────────────────────────
   printf "  ${_NS_C}%-18s${_NS_X} " "Download"
@@ -243,14 +246,15 @@ speedtest() {
 # ────────────────────────────────────────────────────────────
 diskinfo() {
   _ns_header "💾  DISK INFO"
-  df -H | awk 'NR>1 && /^\// {gsub(/%/,"",$5); print $5, $3, $2, $6}' | \
+  echo ""
+  df -H | awk 'NR>1 && /^\//{gsub(/%/,"",$5); print $5, $3, $2, $6}' | \
   while read -r pct used total mount; do
     [[ "$pct" =~ ^[0-9]+$ ]] || continue
     printf "  ${_NS_C}%-22s${_NS_X} " "$mount"
     _ns_bar "$pct"
     printf "  ${_NS_W}%s / %s${_NS_X}\n" "$used" "$total"
+    echo ""
   done
-  echo ""
 }
 
 # ────────────────────────────────────────────────────────────
@@ -426,19 +430,24 @@ devcli() {
   echo ""
   echo "${_NS_BC}  DevCLI Commands${_NS_X}  ${_NS_D}(v${DEVCLI_VERSION})${_NS_X}"
   echo "${_NS_D}  ──────────────────────────────────────${_NS_X}"
+  echo ""
+  echo "  ${_NS_BC}System${_NS_X}"
   echo "  ${_NS_C}sysinfo${_NS_X}       Snapshot: OS, CPU, RAM, GPU"
-
   echo "  ${_NS_C}battinfo${_NS_X}      Battery status & health"
-  echo "  ${_NS_C}netinfo${_NS_X}       Network interfaces, WiFi & DNS"
-  echo "  ${_NS_C}speedtest${_NS_X}     Download / upload / ping test"
   echo "  ${_NS_C}diskinfo${_NS_X}      Disk usage per volume"
-  echo "  ${_NS_C}procinfo${_NS_X}      Top processes by CPU & RAM"
-  echo "  ${_NS_C}portscan${_NS_X}      Open listening ports"
   echo "  ${_NS_C}tempinfo${_NS_X}      CPU temperature"
+  echo ""
+  echo "  ${_NS_BC}Network${_NS_X}"
+  echo "  ${_NS_C}netinfo${_NS_X}       Interfaces, WiFi & DNS"
+  echo "  ${_NS_C}speedtest${_NS_X}     Download / upload / ping"
+  echo "  ${_NS_C}portscan${_NS_X}      Open listening ports"
+  echo ""
+  echo "  ${_NS_BC}Processes${_NS_X}"
+  echo "  ${_NS_C}procinfo${_NS_X}      Top processes by CPU & RAM"
+  echo ""
+  echo "  ${_NS_BC}DevCLI${_NS_X}"
   echo "  ${_NS_C}devcliupdate${_NS_X}  Check & install latest version"
   echo "  ${_NS_C}devcli${_NS_X}        Show this help"
-  echo ""
-
   echo ""
 }
 
