@@ -8,6 +8,11 @@
 setopt local_options 2>/dev/null
 set +e
 
+# ── Version ───────────────────────────────────────────────────
+DEVCLI_VERSION="1.0.1"
+DEVCLI_REPO="Ruhanpaco/DevCLI"
+DEVCLI_UPDATE_CACHE="${HOME}/.cache/devcli_update_check"
+
 # ── Colour helpers ────────────────────────────────────────────
 _NS_C='\033[0;36m'     # cyan  (keys)
 _NS_BC='\033[0;96m'    # bright cyan (headers)
@@ -380,11 +385,135 @@ tempinfo() {
 }
 
 # ────────────────────────────────────────────────────────────
+# _devcli_version_gt  — compare semver strings
+# ────────────────────────────────────────────────────────────
+_devcli_version_gt() {
+  # Returns 0 (true) if $1 > $2 as semver
+  [[ "$1" == "$2" ]] && return 1
+  local IFS=.
+  local -a a=( ${=1} ) b=( ${=2} )
+  for (( i=0; i<3; i++ )); do
+    local ai=${a[i+1]:-0} bi=${b[i+1]:-0}
+    (( ai > bi )) && return 0
+    (( ai < bi )) && return 1
+  done
+  return 1
+}
+
+# ────────────────────────────────────────────────────────────
+# _devcli_check_update — silent background check (once/day)
+# ────────────────────────────────────────────────────────────
+_devcli_check_update() {
+  {
+    # Only check once per day using a cache file
+    local cache="$DEVCLI_UPDATE_CACHE"
+    local now=$(date +%s)
+    if [[ -f "$cache" ]]; then
+      local last_check=$(cat "$cache" 2>/dev/null | head -1)
+      local age=$(( now - ${last_check:-0} ))
+      (( age < 86400 )) && return 0   # checked within 24h, skip
+    fi
+
+    # Fetch latest release tag from GitHub API
+    local latest
+    latest=$(curl -sf --max-time 5 \
+      "https://api.github.com/repos/${DEVCLI_REPO}/releases/latest" \
+      2>/dev/null | grep '"tag_name"' | sed 's/.*"v\?\([^"]*\)".*/\1/')
+
+    [[ -z "$latest" ]] && return 0   # offline or API unreachable
+
+    # Save timestamp + latest version
+    mkdir -p "$(dirname "$cache")"
+    printf '%s\n%s\n' "$now" "$latest" > "$cache"
+
+    # Notify user if a newer version exists
+    if _devcli_version_gt "$latest" "$DEVCLI_VERSION"; then
+      print -P ""
+      print -P "%F{cyan}  DevCLI v${latest} is available!%f  (you have v${DEVCLI_VERSION})"
+      print -P "%F{245}  Run %F{cyan}devcli update%F{245} to upgrade.%f"
+      print -P ""
+    fi
+  } &!   # run silently in background, don't block shell startup
+}
+
+# ────────────────────────────────────────────────────────────
+# devcli update — upgrade to the latest release
+# ────────────────────────────────────────────────────────────
+devcliupdate() {
+  _ns_header "🔄  DEVCLI UPDATE"
+
+  # Check what version is latest
+  printf "  ${_NS_C}%-18s${_NS_X} ${_NS_D}checking…${_NS_X}\n" "Current"
+  printf "\r  ${_NS_C}%-18s${_NS_X} ${_NS_W}%s${_NS_X}\n" "Current" "v${DEVCLI_VERSION}"
+
+  local latest
+  latest=$(curl -sf --max-time 8 \
+    "https://api.github.com/repos/${DEVCLI_REPO}/releases/latest" \
+    2>/dev/null | grep '"tag_name"' | sed 's/.*"v\?\([^"]*\)".*/\1/')
+
+  if [[ -z "$latest" ]]; then
+    printf "  ${_NS_R}Could not reach GitHub. Check your connection.${_NS_X}\n\n"
+    return 1
+  fi
+
+  printf "  ${_NS_C}%-18s${_NS_X} ${_NS_W}%s${_NS_X}\n" "Latest" "v${latest}"
+  echo ""
+
+  if ! _devcli_version_gt "$latest" "$DEVCLI_VERSION"; then
+    printf "  ${_NS_G}✔ Already up to date!${_NS_X}\n\n"
+    return 0
+  fi
+
+  printf "  ${_NS_Y}Upgrading v${DEVCLI_VERSION} → v${latest}…${_NS_X}\n\n"
+
+  # ── Upgrade path: Homebrew (preferred) ───────────────────
+  if command -v brew &>/dev/null && brew list devcli &>/dev/null 2>&1; then
+    printf "  ${_NS_C}Using Homebrew…${_NS_X}\n"
+    brew upgrade devcli && \
+      printf "  ${_NS_G}✔ Upgraded via Homebrew!${_NS_X}\n\n" && \
+      return 0
+  fi
+
+  # ── Upgrade path: direct from GitHub tarball ─────────────
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  local tarball_url="https://github.com/${DEVCLI_REPO}/archive/refs/tags/v${latest}.tar.gz"
+
+  printf "  ${_NS_C}Downloading v${latest}…${_NS_X}\n"
+  if ! curl -sL --max-time 30 "$tarball_url" | tar -xz -C "$tmpdir" 2>/dev/null; then
+    printf "  ${_NS_R}✘ Download failed.${_NS_X}\n\n"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  local extracted
+  extracted=$(ls "$tmpdir" | head -1)
+  local install_script="$tmpdir/$extracted/install.sh"
+
+  if [[ ! -f "$install_script" ]]; then
+    printf "  ${_NS_R}✘ install.sh not found in release.${_NS_X}\n\n"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  chmod +x "$install_script"
+  zsh "$install_script"
+
+  rm -rf "$tmpdir"
+
+  # Bust the update cache so next shell shows no alert
+  rm -f "$DEVCLI_UPDATE_CACHE" 2>/dev/null
+
+  printf "  ${_NS_G}✔ DevCLI updated to v${latest}!${_NS_X}\n"
+  printf "  ${_NS_D}Restart your terminal to apply changes.${_NS_X}\n\n"
+}
+
+# ────────────────────────────────────────────────────────────
 # devcli — Help
 # ────────────────────────────────────────────────────────────
 devcli() {
   echo ""
-  echo "${_NS_BC}  DevCLI Commands${_NS_X}"
+  echo "${_NS_BC}  DevCLI Commands${_NS_X}  ${_NS_D}(v${DEVCLI_VERSION})${_NS_X}"
   echo "${_NS_D}  ──────────────────────────────────────${_NS_X}"
   echo "  ${_NS_C}sysinfo${_NS_X}       Snapshot: OS, CPU, RAM, GPU"
   echo "  ${_NS_C}syswatch${_NS_X}      Live dashboard (refreshes every 2s)"
@@ -395,8 +524,12 @@ devcli() {
   echo "  ${_NS_C}procinfo${_NS_X}      Top processes by CPU & RAM"
   echo "  ${_NS_C}portscan${_NS_X}      Open listening ports"
   echo "  ${_NS_C}tempinfo${_NS_X}      CPU temperature"
+  echo "  ${_NS_C}devcliupdate${_NS_X}  Check & install latest version"
   echo "  ${_NS_C}devcli${_NS_X}        Show this help"
   echo ""
   echo "  ${_NS_D}Tip: syswatch [seconds]  e.g. syswatch 1${_NS_X}"
   echo ""
 }
+
+# ── Run update check in background on every new shell ────────
+_devcli_check_update
