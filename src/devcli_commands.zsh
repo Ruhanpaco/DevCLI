@@ -14,19 +14,20 @@ DEVCLI_REPO="Ruhanpaco/DevCLI"
 DEVCLI_UPDATE_CACHE="${HOME}/.cache/devcli_update_check"
 
 # ── Colour helpers ────────────────────────────────────────────
-_NS_C='\033[0;36m'     # cyan  (keys)
-_NS_BC='\033[0;96m'    # bright cyan (headers)
-_NS_G='\033[0;32m'     # green
-_NS_Y='\033[1;33m'     # yellow
-_NS_R='\033[0;31m'     # red
-_NS_W='\033[1;37m'     # white
-_NS_D='\033[2;37m'     # dim
-_NS_X='\033[0m'        # reset
+# Using $'...' so \033 is interpreted as ESC at assignment time
+_NS_C=$'\033[0;36m'     # cyan  (keys)
+_NS_BC=$'\033[0;96m'    # bright cyan (headers)
+_NS_G=$'\033[0;32m'     # green
+_NS_Y=$'\033[1;33m'     # yellow
+_NS_R=$'\033[0;31m'     # red
+_NS_W=$'\033[1;37m'     # white
+_NS_D=$'\033[2;37m'     # dim
+_NS_X=$'\033[0m'        # reset
 
 _ns_header() {
   echo ""
   echo "${_NS_BC}╔══════════════════════════════════════╗${_NS_X}"
-  printf  "${_NS_BC}║  %-36s║${_NS_X}\n" "$1"
+  printf  "${_NS_BC}║ %-36s║${_NS_X}\n" "$1"
   echo "${_NS_BC}╚══════════════════════════════════════╝${_NS_X}"
 }
 
@@ -112,96 +113,6 @@ sysinfo() {
   _ns_row "Shell"    "$SHELL ($ZSH_VERSION)"
   _ns_row "Hostname" "$(hostname)"
   echo ""
-}
-
-# ────────────────────────────────────────────────────────────
-# syswatch — LIVE real-time dashboard (Ctrl+C to exit)
-# ────────────────────────────────────────────────────────────
-syswatch() {
-  local interval=${1:-2}
-
-  # ── Terminal cleanup function — called on ANY exit ──────
-  _syswatch_cleanup() {
-    tput cnorm    2>/dev/null  # restore cursor
-    tput rmcup    2>/dev/null  # restore original screen buffer
-    printf '%b' "${_NS_X}"    # reset colours
-    # Clear the trap so it won't fire again
-    trap - INT TERM EXIT HUP
-  }
-
-  # Register cleanup for every possible exit signal
-  trap '_syswatch_cleanup; return 0' INT TERM EXIT HUP
-
-  # Switch to alternate screen buffer (preserves scrollback)
-  tput smcup    2>/dev/null
-  tput civis    2>/dev/null  # hide cursor
-  clear
-
-  while true; do
-    # ── Gather metrics ──────────────────────────────────────
-    local cpu_pct ram_pct batt_pct batt_status
-    local ram_total ram_used load net_ssid
-
-    cpu_pct=$(top -l 2 -n 0 2>/dev/null | \
-      awk -F'[:,% ]+' '/CPU usage/{usr=$2; sys=$4; print int(usr+sys)}' 2>/dev/null | tail -1) || cpu_pct=0
-    [[ -z "$cpu_pct" ]] && cpu_pct=0
-    ram_total=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 )) 2>/dev/null || ram_total=0
-    ram_pct=$(memory_pressure 2>/dev/null | \
-      awk '/free percentage/{pct=$NF+0} END{printf "%d",100-pct}' 2>/dev/null) || ram_pct=0
-    [[ -z "$ram_pct" ]] && ram_pct=0
-    ram_used=$(( ${ram_pct:-0} * ram_total / 100 ))
-    load=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2, $3, $4}')
-    batt_pct=$(pmset -g batt 2>/dev/null | awk -F'[%;]' '/Battery/{print $2+0}')
-    batt_status=$(pmset -g batt 2>/dev/null | \
-      grep -o 'charging\|discharging\|not charging\|AC Power' | head -1)
-    net_ssid=$(_wifi_ssid)
-
-    # Disk (main volume)
-    local disk_pct disk_used disk_total
-    read -r disk_used disk_total disk_pct <<< \
-      $(df -H / 2>/dev/null | awk 'NR==2{gsub(/%/,"",$5); print $3,$2,$5}')
-
-    # ── Draw ────────────────────────────────────────────────
-    tput cup 0 0   # move to top-left (no flicker)
-
-    echo "${_NS_BC}╔════════════════════════════════════════════════╗${_NS_X}"
-    printf "${_NS_BC}║  %-46s║${_NS_X}\n" "⚡  DEVCLI LIVE  —  $(date '+%H:%M:%S')  [Ctrl+C to exit]"
-    echo "${_NS_BC}╚════════════════════════════════════════════════╝${_NS_X}"
-    echo ""
-
-    printf "  ${_NS_C}%-16s${_NS_X} " "CPU Usage"
-    _ns_bar "${cpu_pct:-0}"; printf "  ${_NS_W}%s%%${_NS_X}\n" "${cpu_pct:-0}"
-
-    printf "  ${_NS_C}%-16s${_NS_X} " "RAM Usage"
-    _ns_bar "${ram_pct:-0}"; printf "  ${_NS_W}%s/%s GiB${_NS_X}\n" "$ram_used" "$ram_total"
-
-    printf "  ${_NS_C}%-16s${_NS_X} " "Disk  (/)"
-    _ns_bar "${disk_pct:-0}"; printf "  ${_NS_W}%s/%s${_NS_X}\n" "$disk_used" "$disk_total"
-
-    echo ""
-    printf "  ${_NS_C}%-16s${_NS_X} " "Load Avg"
-    printf "${_NS_W}%s${_NS_X}\n" "${load:-N/A}"
-
-    printf "  ${_NS_C}%-16s${_NS_X} " "Battery"
-    if [[ -n "$batt_pct" ]]; then
-      _ns_bar "${batt_pct:-0}"
-      printf "  ${_NS_W}%s%%  %s${_NS_X}\n" "$batt_pct" "${batt_status:-}"
-    else
-      printf "${_NS_W}AC Power (no battery)${_NS_X}\n"
-    fi
-
-    echo ""
-    printf "  ${_NS_C}%-16s${_NS_X} " "WiFi"
-    printf "${_NS_W}%s${_NS_X}\n" "${net_ssid:-Not connected}"
-
-    echo ""
-    echo "  ${_NS_D}Refreshing every ${interval}s…${_NS_X}          "
-
-    # Clear any stale lines below
-    tput ed
-
-    sleep "$interval"
-  done
 }
 
 # ────────────────────────────────────────────────────────────
@@ -516,7 +427,7 @@ devcli() {
   echo "${_NS_BC}  DevCLI Commands${_NS_X}  ${_NS_D}(v${DEVCLI_VERSION})${_NS_X}"
   echo "${_NS_D}  ──────────────────────────────────────${_NS_X}"
   echo "  ${_NS_C}sysinfo${_NS_X}       Snapshot: OS, CPU, RAM, GPU"
-  echo "  ${_NS_C}syswatch${_NS_X}      Live dashboard (refreshes every 2s)"
+
   echo "  ${_NS_C}battinfo${_NS_X}      Battery status & health"
   echo "  ${_NS_C}netinfo${_NS_X}       Network interfaces, WiFi & DNS"
   echo "  ${_NS_C}speedtest${_NS_X}     Download / upload / ping test"
@@ -527,7 +438,7 @@ devcli() {
   echo "  ${_NS_C}devcliupdate${_NS_X}  Check & install latest version"
   echo "  ${_NS_C}devcli${_NS_X}        Show this help"
   echo ""
-  echo "  ${_NS_D}Tip: syswatch [seconds]  e.g. syswatch 1${_NS_X}"
+
   echo ""
 }
 
